@@ -128,6 +128,7 @@ object_neg_mv.list <- tidymassshiny::find_noise_multiple(
 )
 
 object_neg_mv = object_neg_mv.list$object_mv
+
 p1.neg <- object_neg_raw |> massqc::show_sample_missing_values(
   color_by = para_mv$color_by |> as.character(),
   order_by = para_mv$order_by|> as.character(),
@@ -150,4 +151,12 @@ p.neg.mv = (p1.neg + ggtitle('raw data')) / (p2.neg + ggtitle('remove noise'))
 
 ggsave(filename = paste0(data_clean_out_file,"01.mv_variable_neg.pdf"),plot = p.neg.mv,width = 12,height = 10)
 ggsave(filename = paste0(data_clean_out_file,"01.mv_variable_neg.png"),plot = p.neg.mv,width = 12,height = 10,dpi = 300)
+
+noise_tbl_pos = object_pos_mv.list$noisy_tbl
+noise_tbl_neg = object_neg_mv.list$noisy_tbl
+writexl::write_xlsx(x = list(pos = noise_tbl_pos,
+                             neg = noise_tbl_neg),
+                    path = paste0(data_clean_out_file,"02.noise_information.xlsx"))
+# remove outlier ----------------------------------------------------------
+
 
