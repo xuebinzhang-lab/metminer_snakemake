@@ -303,13 +303,174 @@ save(object_neg_outlier,file = paste0(wd,"/massdataset/03.object_neg_outlier.rda
 
 
 # missing value imputation ------------------------------------------------------------------
+para_impute_tbl = temp_para |> 
+  dplyr::filter(process == "impute mv") |> 
+  dplyr::select(para,Value)
+para_impute = para_impute_tbl |> pull(Value) |> setNames(para_impute_tbl$para) |> as.list()
+
+message(msg_run("Step3. missing value inputation...."))
+
+object_pos_impute <- 
+  object_pos_outlier %>% impute_mv(
+    method = para_impute$method %>% as.character(),
+    rowmax = para_impute$rowmax %>% as.numeric(),
+    k = para_impute$k %>% as.numeric(),
+    colmax = para_impute$colmax %>% as.numeric(),
+    maxp = para_impute$maxp %>% as.numeric(),
+    rng.seed = para_impute$rng.seed %>% as.numeric(),
+    maxiter = para_impute$maxiter %>% as.numeric(),
+    ntree = para_impute$ntree %>% as.numeric(),
+    decreasing = para_impute$decreasing %>% as.logical(),
+    nPcs = para_impute$npcs%>% as.numeric(),
+    maxSteps = para_impute$maxsteps %>% as.numeric(),
+    threshold = para_impute$threshold %>% as.numeric()
+  )
+
+object_neg_impute <- 
+  object_neg_outlier %>% impute_mv(
+    method = para_impute$method %>% as.character(),
+    rowmax = para_impute$rowmax %>% as.numeric(),
+    k = para_impute$k %>% as.numeric(),
+    colmax = para_impute$colmax %>% as.numeric(),
+    maxp = para_impute$maxp %>% as.numeric(),
+    rng.seed = para_impute$rng.seed %>% as.numeric(),
+    maxiter = para_impute$maxiter %>% as.numeric(),
+    ntree = para_impute$ntree %>% as.numeric(),
+    decreasing = para_impute$decreasing %>% as.logical(),
+    nPcs = para_impute$npcs%>% as.numeric(),
+    maxSteps = para_impute$maxsteps %>% as.numeric(),
+    threshold = para_impute$threshold %>% as.numeric()
+  )
+
+save(object_pos_impute,file = paste0(wd,"/massdataset/04.object_pos_impute.rda"))
+save(object_neg_impute,file = paste0(wd,"/massdataset/04.object_neg_impute.rda"))
+
+
+# data normalization ------------------------------------------------------
+
+para_norm_tbl = temp_para |> 
+  dplyr::filter(process == "normalization") |> 
+  dplyr::select(para,Value)
+para_norm = para_norm_tbl |> pull(Value) |> setNames(para_norm_tbl$para) |> as.list()
+
+message(msg_run("Step4. run data normalization...."))
+
+object_pos_norm <-
+  object_pos_impute %>%
+  normalize_data(
+    method = para_norm$method %>% as.character(),
+    keep_scale = para_norm$keep_scale %>% as.logical(),
+    optimization = para_norm$optimization %>% as.logical(),
+    pqn_reference = para_norm$pqn_reference %>% as.character(),
+    begin = para_norm$begin %>% as.numeric(),
+    end = para_norm$end %>% as.numeric(),
+    step = para_norm$step %>% as.numeric(),
+    multiple = para_norm$multiple %>% as.numeric(),
+    threads = para_norm$threads %>% as.numeric()
+  )
+
+if((object_pos_norm %>% extract_sample_info() %>% pull(batch) %>% unique() %>% length()) >1)
+  {object_pos_norm = integrate_data(object = object_pos_norm,method = "qc_mean")}
+
+object_neg_norm <-
+  object_neg_impute %>%
+  normalize_data(
+    method = para_norm$method %>% as.character(),
+    keep_scale = para_norm$keep_scale %>% as.logical(),
+    optimization = para_norm$optimization %>% as.logical(),
+    pqn_reference = para_norm$pqn_reference %>% as.character(),
+    begin = para_norm$begin %>% as.numeric(),
+    end = para_norm$end %>% as.numeric(),
+    step = para_norm$step %>% as.numeric(),
+    multiple = para_norm$multiple %>% as.numeric(),
+    threads = para_norm$threads %>% as.numeric()
+  )
+if((object_neg_norm %>% extract_sample_info() %>% pull(batch) %>% unique() %>% length()) >1)
+  {object_neg_norm = integrate_data(object = object_neg_norm,method = "qc_mean")}
+
+save(object_pos_norm,file = paste0(wd,"/massdataset/05.object_pos_norm.rda"))
+save(object_neg_norm,file = paste0(wd,"/massdataset/05.object_neg_norm.rda"))
+
+##> pca plot
+
+pca_p1_before_pos = massqc::massqc_pca(
+  object = object_pos_impute %>% +1 %>% log(2) %>% scale(),
+  color_by = para_norm$color_by
+)
+
+pca_p1_after_pos = massqc::massqc_pca(
+  object = object_pos_norm %>% +1 %>% log(2) %>% scale(),
+  color_by = para_norm$color_by
+)
+
+pca_p1_pos = (pca_p1_before_pos+ggtitle("Before")) + (pca_p1_after_pos+ggtitle("After"))  +
+  patchwork::plot_layout(guides = 'collect') + patchwork::plot_annotation(tag_levels = "a")
+
+pca_p1_before_neg = massqc::massqc_pca(
+  object = object_neg_impute %>% +1 %>% log(2) %>% scale(),
+  color_by = para_norm$color_by
+)
+
+pca_p1_after_neg = massqc::massqc_pca(
+  object = object_neg_norm %>% +1 %>% log(2) %>% scale(),
+  color_by = para_norm$color_by
+)
+
+pca_p1_neg = (pca_p1_before_neg+ggtitle("Before")) + (pca_p1_after_neg+ggtitle("After")) +
+  patchwork::plot_layout(guides = 'collect') + patchwork::plot_annotation(tag_levels = "a")
+
+ggsave(filename = paste0(data_clean_out_file,"/03.PCA_before_after_normalization_pos.pdf"),plot = pca_p1_pos,width = 12,height = 5.8)
+ggsave(filename = paste0(data_clean_out_file,"/03.PCA_before_after_normalization_pos.png"),plot = pca_p1_pos,width = 12,height = 5.8)
+ggsave(filename = paste0(data_clean_out_file,"/03.PCA_before_after_normalization_neg.pdf"),plot = pca_p1_neg,width = 12,height = 5.8)
+ggsave(filename = paste0(data_clean_out_file,"/03.PCA_before_after_normalization_neg.png"),plot = pca_p1_neg,width = 12,height = 5.8)
+
+##> rsd plot
+rsd_before_plt_pos <-
+  object_pos_impute %>%
+    activate_mass_dataset("sample_info") %>%
+    dplyr::filter(class == "QC") %>%
+    massqc::massqc_cumulative_rsd_plot(
+      rsd_cutoff = para_norm$rsd_cutoff %>% as.numeric(),
+      title = 'Before normalization'
+    )
+
+rsd_after_plt_pos <-
+  object_pos_norm %>%
+  activate_mass_dataset("sample_info") %>%
+  dplyr::filter(class == "QC") %>%
+  massqc::massqc_cumulative_rsd_plot(
+    rsd_cutoff = para_norm$rsd_cutoff %>% as.numeric(),
+    title = 'After normalization'
+  )
 
 
 
+rsd_before_plt_neg <-
+  object_neg_impute %>%
+  activate_mass_dataset("sample_info") %>%
+  dplyr::filter(class == "QC") %>%
+  massqc::massqc_cumulative_rsd_plot(
+    rsd_cutoff = para_norm$rsd_cutoff %>% as.numeric(),
+    title = 'Before normalization'
+  )
+
+rsd_after_plt_neg <-
+  object_neg_norm %>%
+  activate_mass_dataset("sample_info") %>%
+  dplyr::filter(class == "QC") %>%
+  massqc::massqc_cumulative_rsd_plot(
+    rsd_cutoff = para_norm$rsd_cutoff %>% as.numeric(),
+    title = 'After normalization'
+  )
 
 
+rsd_p1_neg = (rsd_before_plt_neg) + (rsd_after_plt_neg) +
+  patchwork::plot_layout(guides = 'collect') + patchwork::plot_annotation(tag_levels = "a")
 
+rsd_p1_pos = (rsd_before_plt_pos) + (rsd_after_plt_pos) +
+  patchwork::plot_layout(guides = 'collect') + patchwork::plot_annotation(tag_levels = "a")
 
-
-
-
+ggsave(filename = paste0(data_clean_out_file,"/03.RSD_before_after_normalization_pos.pdf"),plot = rsd_p1_pos,width = 12,height = 5.8)
+ggsave(filename = paste0(data_clean_out_file,"/03.RSD_before_after_normalization_pos.png"),plot = rsd_p1_pos,width = 12,height = 5.8)
+ggsave(filename = paste0(data_clean_out_file,"/03.RSD_before_after_normalization_neg.pdf"),plot = rsd_p1_neg,width = 12,height = 5.8)
+ggsave(filename = paste0(data_clean_out_file,"/03.RSD_before_after_normalization_neg.png"),plot = rsd_p1_neg,width = 12,height = 5.8)
