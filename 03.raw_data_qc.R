@@ -271,8 +271,8 @@ load(folder_check.pos)
 
 sample_info <- read.csv(metadata)
 object <- object %>% activate_mass_dataset('sample_info') %>% 
-  select(sample_id) %>% 
-  left_join(sample_info)
+  dplyr::select(sample_id) %>% 
+  dplyr::left_join(sample_info)
 dir.create(paste0(folder_check_qc,"/POS/"),showWarnings = F,recursive = T)
 mass_qc_modified(
   object = object,path = paste0(folder_check_qc,"/POS/"),type = 'html',pca_col_by = pca_col_by,
@@ -282,8 +282,8 @@ load(folder_check.neg)
 
 sample_info <- read.csv(metadata)
 object <- object %>% activate_mass_dataset('sample_info') %>% 
-  select(sample_id) %>% 
-  left_join(sample_info)
+  dplyr::select(sample_id) %>% 
+  dplyr::left_join(sample_info)
 dir.create(paste0(folder_check_qc,"/NEG/"),showWarnings = F,recursive = T)
 mass_qc_modified(
   object = object,path = paste0(folder_check_qc,"/NEG/"),type = 'html',pca_col_by = pca_col_by,

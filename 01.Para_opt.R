@@ -57,15 +57,16 @@ if (is.null(args$filenum)){
 }
 
 wd = args$wd |> as.character()
+setwd(wd)
 massSDrange = args$massSDrange |> as.numeric()
 smooth = args$smooth |> as.numeric()
 cutoff = args$cutoff |> as.numeric()
 thread = args$thread |> as.numeric()
 filenum = args$filenum |> as.numeric()
 ##> file check
-folder_check.neg = paste0(wd,"/MS1/NEG/")
-folder_check.pos = paste0(wd,"/MS1/POS/")
 
+print(folder_check.neg)
+print(folder_check.pos)
 if(!file.exists(folder_check.neg) | !file.exists(folder_check.pos)) {
   message(msg_no('Please check your working directory, make sure ms1 files were correctly set'))
   q(status = 1)

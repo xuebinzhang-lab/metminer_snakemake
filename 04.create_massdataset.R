@@ -76,14 +76,14 @@ if(format == 'rda') {
   object_pos_raw <-
     object_pos_raw %>% 
     activate_mass_dataset('sample_info') %>% 
-    select(sample_id) %>% 
-    left_join(sample_info)
+    dplyr::select(sample_id) %>% 
+    dplyr::left_join(sample_info)
   load(paste0(wd,"/massdataset/object_neg_raw.rda"))
   object_neg_raw <-
     object_neg_raw %>% 
     activate_mass_dataset('sample_info') %>% 
-    select(sample_id) %>% 
-    left_join(sample_info)
+    dplyr::select(sample_id) %>% 
+    dplyr::left_join(sample_info)
 } 
 
 if(format == "csv") {
