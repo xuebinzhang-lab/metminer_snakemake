@@ -275,7 +275,6 @@ para_mv_tbl = temp_para |>
 para_mv = para_mv_tbl |> pull(Value) |> setNames(para_mv_tbl$para) |> as.list()
 
 column = para_mv$column |> as.character()
-polarity = para_mv$polarity |> as.character()
 ms1.ms2.match.mz.tol = para_mv$ms1.ms2.match.mz.tol |> as.numeric()
 ms1.ms2.match.rt.tol = para_mv$ms1.ms2.match.rt.tol |> as.numeric()
 n_session = para_mv$n_session |> as.numeric()
@@ -285,28 +284,28 @@ n_session = para_mv$n_session |> as.numeric()
 load("massdataset/05.object_pos_norm.rda")
 load("massdataset/05.object_neg_norm.rda")
 
-object_pos.ms2 <-
+object_pos_ms2 <-
   object_pos_norm %>%
   mda_mutate_ms2(
     object = .,
     column = column,
-    polarity = polarity,
+    polarity = "positive",
     ms1.ms2.match.mz.tol = ms1.ms2.match.mz.tol,
     ms1.ms2.match.rt.tol = ms1.ms2.match.rt.tol,
     path = "MS2/POS/",
     n_session = n_session
   )
-save(object_pos.ms2,file = "massdataset/06.object_pos_ms2.rda")
+save(object_pos_ms2,file = "massdataset/06.object_pos_ms2.rda")
 
-object_neg.ms2 <-
+object_neg_ms2 <-
   object_neg_norm %>%
   mda_mutate_ms2(
     object = .,
     column = column,
-    polarity = polarity,
+    polarity = "negative",
     ms1.ms2.match.mz.tol = ms1.ms2.match.mz.tol,
     ms1.ms2.match.rt.tol = ms1.ms2.match.rt.tol,
     path = "MS2/NEG/",
     n_session = n_session
   )
-save(object_neg.ms2,file = "massdataset/06.object_pos_ms2.rda")
+save(object_neg_ms2,file = "massdataset/06.object_neg_ms2.rda")

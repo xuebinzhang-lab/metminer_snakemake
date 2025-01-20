@@ -49,7 +49,7 @@ if (is.null(args$customized_db)){
 wd = args$wd |> as.character()
 parameters = args$parameters |>  as.character()
 threads = args$threads |> as.character()
-customized_db = args$customized_db %>% as.character()
+customized_db = args$customized_db |>as.character()
 setwd(wd)
 
 
@@ -64,7 +64,7 @@ suppressMessages(library(tidymassshiny))
 suppressMessages(library(plantmdb))
 suppressMessages(library(progressr))
 suppressMessages(library(patchwork))
-
+suppressMessages(library(purrr))
 handlers(global = TRUE)
 handlers("progress")
 
@@ -97,9 +97,11 @@ rt.match.weight = para_anno$rt.match.weight |> as.numeric()
 ms2.match.weight = para_anno$ms2.match.weight |> as.numeric()
 candidate.num = para_anno$candidate.num |> as.numeric()
 threads = para_anno$threads |> as.numeric()
-db_name = para_anno$database |> stringr::str_split(
-  string = ., pattern = "\\|",n = Inf,simplify = FALSE
-) %>% unlist()
+total.score.tol = para_anno$total.score.tol |>as.numeric()
+ms1.match.weight = para_anno$ms1.match.weight |>as.numeric()
+db_name = stringr::str_split(
+  string = para_anno$database, pattern = "\\|",n = Inf,simplify = FALSE
+) |> unlist()
 
 ##> run anno 
 buildin_db <- list(
@@ -163,7 +165,74 @@ save(db,file = "Feature_annotation/Database/auto_saved.dblist")
 
 # run annotation ----------------------------------------------------------
 
+load("massdataset/06.object_pos_ms2.rda")
+load("massdataset/06.object_neg_ms2.rda")
+tags = names(db)
+
+# 初始化变量
+object_pos_anno <- NULL
+object_neg_anno <- NULL
+
+# 使用 map
+map(.x = 1:length(tags), .f = function(.x) {
+  # 判断当前循环是第几次，并分配初始值
+  if (.x == 1) {
+    object_pos_temp <- object_pos_ms2
+    object_neg_temp <- object_neg_ms2
+  } else {
+    object_pos_temp <- object_pos_anno
+    object_neg_temp <- object_neg_anno
+  }
+  
+  # 执行正极性代谢物注释
+  object_pos_anno <<- annotate_metabolites_mass_dataset(
+    object = object_pos_temp,
+    polarity = "positive",
+    database = db[[.x]],
+    ms1.match.ppm = ms1.match.ppm,
+    ms2.match.ppm = ms2.match.ppm,
+    rt.match.tol = rt.match.tol,
+    candidate.num = candidate.num,
+    column = column,
+    threads = threads,
+    mz.ppm.thr = mz.ppm.thr,
+    ms2.match.tol = ms2.match.tol,
+    fraction.weight = fraction.weight,
+    dp.forward.weight = dp.forward.weight,
+    dp.reverse.weight = dp.reverse.weight,
+    remove_fragment_intensity_cutoff = remove_fragment_intensity_cutoff,
+    ce = ce,
+    ms1.match.weight = ms1.match.weight,
+    rt.match.weight = rt.match.weight,
+    ms2.match.weight = ms2.match.weight,
+    total.score.tol = total.score.tol
+  )
+  
+  # 执行负极性代谢物注释
+  object_neg_anno <<- annotate_metabolites_mass_dataset(
+    object = object_neg_temp,
+    polarity = "negative",
+    database = db[[.x]],
+    ms1.match.ppm = ms1.match.ppm,
+    ms2.match.ppm = ms2.match.ppm,
+    rt.match.tol = rt.match.tol,
+    candidate.num = candidate.num,
+    column = column,
+    threads = threads,
+    mz.ppm.thr = mz.ppm.thr,
+    ms2.match.tol = ms2.match.tol,
+    fraction.weight = fraction.weight,
+    dp.forward.weight = dp.forward.weight,
+    dp.reverse.weight = dp.reverse.weight,
+    remove_fragment_intensity_cutoff = remove_fragment_intensity_cutoff,
+    ce = ce,
+    ms1.match.weight = ms1.match.weight,
+    rt.match.weight = rt.match.weight,
+    ms2.match.weight = ms2.match.weight,
+    total.score.tol = total.score.tol
+  )
+})
 
 
-
-
+save(object_neg_anno,file = "massdataset/07.object_neg_anno.rda")
+save(object_pos_anno,file = "massdataset/07.object_pos_anno.rda")
