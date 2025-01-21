@@ -1,4 +1,4 @@
-##############################################################
+                  ##############################################################
 #            Name: One-step metminer
 #            Prj: MetMiner pipeline 
 #            Assignment: DAM analysis
@@ -23,7 +23,7 @@ command=matrix(c(
   'help', 'h', 0, 'logic', 'help information',
   'wd', 'w', 1, 'character', 'working directory',
   'compare_group', 'c', 1, 'character','input group file: \n                     1. first column is sample names correspounding to peak matrix, \n                     2. second column is sample group of samples',
-  'kegg_database','k', 1, 'kegg database',
+  'kegg_database','k', 1,'character', 'kegg database',
   'parameters', 's', 1, 'character','An excel file with default parameters'
 ),byrow = T, ncol = 5)
 args = getopt(command)
@@ -48,29 +48,31 @@ if (is.null(args$compare_group)){
 }
 
 
-suppressMessages(if (!require('MDAtoolkits')) devtools::install_github("https://github.com/ShawnWx2019/MDAtoolkits",ref = 'master'))
-suppressMessages(if (!require('tidyverse')) BiocManager::install('tidyverse'))
-suppressMessages(if (!require('ropls')) BiocManager::install('ropls'))
-suppressMessages(if (!require('PCAtools')) BiocManager::install('PCAtools'))
-suppressMessages(if (!require('devtools')) BiocManager::install('devtools'))
-suppressMessages(if (!require('circlize')) devtools::install_github("jokergoo/circlize"))
-suppressMessages(if (!require('ComplexHeatmap')) devtools::install_github("jokergoo/ComplexHeatmap"))
-suppressMessages(if (!require('ggprism')) BiocManager::install("ggprism"))
-suppressMessages(if (!require('clusterProfiler')) BiocManager::install("clusterProfiler"))
-suppressMessages(if (!require('splitstackshape')) BiocManager::install("splitstackshape"))
-suppressMessages(if (!require('rstatix')) BiocManager::install("rstatix"))
-suppressMessages(if (!require('bruceR')) install.packages("bruceR"))
+suppressMessages(library(MDAtoolkits))
+suppressMessages(library(tidyverse))
+suppressMessages(library(ropls))
+suppressMessages(library(PCAtools))
+suppressMessages(library(devtools))
+suppressMessages(library(circlize))
+suppressMessages(library(ComplexHeatmap))
+suppressMessages(library(ggprism))
+suppressMessages(library(clusterProfiler))
+suppressMessages(library(splitstackshape))
+suppressMessages(library(rstatix))
+suppressMessages(library(bruceR))
+suppressMessages(library(tidymass))
 # nameing parameters ------------------------------------------------------
 wd = args$wd |> as.character()
 compare_group = args$compare_group |>  as.character()
 annotation_file = args$annotation_file |> as.character()
 kegg_database = args$kegg_database |> as.character()
+parameters = args$parameters |> as.character()
 load(kegg_database)
 setwd(wd)
 
 load("massdataset/08.object_merge.rda")
 sample_info <- object_merge %>% extract_sample_info() %>% 
-  dplyr::select(sample_id,group) %>% unique()
+  dplyr::select(sample_id,group) %>% distinct()
 compare_groups = import(compare_group)
 
 temp_para = readxl::read_xlsx(parameters) 
@@ -88,7 +90,10 @@ test.method <- para_dam$test.method %>% as.character()
 pls.method <- para_dam$pls.method %>% as.character()
 # run ---------------------------------------------------------------------
 
-
+select = dplyr::select
+filter = dplyr::filter
+left_join = dplyr::left_join
+unique = base::unique
 ## get peak area file ==============
 message(msg_run("Step1. File format check ... "))
 
@@ -101,8 +106,8 @@ check_tmp1 = class(peak_check$peak)
 if (check_tmp1 != "numeric") {
   suppressWarnings({
     check_tmp2 = peak_check %>%
-      mutate(peak = as.numeric(peak)) %>%
-      filter(is.na(peak))
+      dplyr::mutate(peak = as.numeric(peak)) %>%
+      dplyr::filter(is.na(peak))
   })
   
   error_compound = unique(check_tmp2$CompoundID)
@@ -162,7 +167,9 @@ if(ncol(annot_df) < 2) {
 
 
 # PCA analysis ------------------------------------------------------------
-map(.x = 1:nrow(compare_groups),.f = function(.x) {
+library(furrr)
+future::plan("multicore", workers = 40)
+furrr::future_map(.x = 1:nrow(compare_groups),.f = function(.x) {
   left = compare_groups[.x,1] %>% as.character()
   right = compare_groups[.x,2] %>% as.character()
   message(msg_run("Step2. Start PCA analysis ..."))
@@ -191,7 +198,7 @@ map(.x = 1:nrow(compare_groups),.f = function(.x) {
   )
   
   message(msg_run("running pca."))
-  pca_result = pca(
+  pca_result = PCAtools::pca(
     mat = pca_mat,
     metadata = pca_group,
     scale = T,removeVar = 0.1
