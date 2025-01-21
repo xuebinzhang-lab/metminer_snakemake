@@ -64,10 +64,16 @@ suppressMessages(library(plantmdb))
 suppressMessages(library(progressr))
 suppressMessages(library(patchwork))
 suppressMessages(library(purrr))
+suppressMessages(library(stringr))
 handlers(global = TRUE)
 handlers("progress")
 
 
+# functions ---------------------------------------------------------------
+
+re_form_reg = function(string){
+  string %>% str_replace_all("\\(","\\\\(") %>% str_replace_all("\\)","\\\\)") %>% str_replace_all("\\-","\\\\-")%>% str_replace_all("\\+","\\\\+")
+}
 # run_annotation ----------------------------------------------------------
 
 ##> parameters
@@ -80,21 +86,131 @@ para_anno_filter_tbl = temp_para |>
 
 para_anno_filter = para_anno_filter_tbl |> pull(Value) |> setNames(para_anno_filter_tbl$para) |> as.list()
 
-Adduct_pos = stringr::str_split(
-  string = para_anno_filter$Adduct_pos, pattern = "\\|",n = Inf,simplify = FALSE
-) |> unlist()
+Adduct_pos = para_anno_filter$Adduct_pos
 
-Adduct_neg = stringr::str_split(
-  string = para_anno_filter$Adduct_neg, pattern = "\\|",n = Inf,simplify = FALSE
-) |> unlist()
+Adduct_neg = para_anno_filter$Adduct_neg
 
 multi_anno = para_anno_filter$multi_anno %>% as.character()
 redundancy = para_anno_filter$redundancy %>% as.character()
-column = para_anno_filter$column %>% as.character()
+unclass = para_anno_filter$unclass %>% as.logical()
+
 
 load("massdataset/07.object_neg_anno.rda")
 load("massdataset/07.object_pos_anno.rda")
 
 annotation_tbl_pos <- 
   object_pos_anno %>% extract_annotation_table()
+annotation_tbl_neg <- 
+  object_neg_anno %>% extract_annotation_table()
+
+# run filtering -----------------------------------------------------------
+##> step1 Level 3 filtering by adduct
+
+L3_annotation_neg <- annotation_tbl_neg %>% 
+  dplyr::filter(Level == 3) %>% 
+  dplyr::filter(stringr::str_detect(Adduct,re_form_reg(Adduct_neg)))
+  
+L3_annotation_pos <- annotation_tbl_pos %>% 
+  dplyr::filter(Level == 3) %>% 
+  dplyr::filter(stringr::str_detect(Adduct,re_form_reg(Adduct_pos)))
+
+L12_annotation_neg =  annotation_tbl_neg %>% 
+  dplyr::filter(Level != 3)
+
+L12_annotation_pos <- annotation_tbl_pos %>% 
+  dplyr::filter(Level != 3)
+temp_step1_anno <- rbind(L3_annotation_neg,L3_annotation_pos,L12_annotation_neg,L12_annotation_pos) %>% tibble() %>% 
+  mutate(Adduct_level = case_when(
+    stringr::str_detect(Adduct,re_form_reg("(M+H)+|(M-H)-")) ~ 1,
+    TRUE ~ 2
+  ))
+
+##> step2 filter multiple duplications
+temp_step2_anno <-
+  temp_step1_anno %>% 
+  dplyr::group_by(variable_id) %>% 
+  dplyr::slice_min(order_by = Level) %>% 
+  dplyr::slice_max(order_by = Total.score) %>% 
+  dplyr::slice_min(order_by = Adduct_level)
+
+if(multi_anno == "keep highest total score") {
+  temp_step2_anno = temp_step2_anno
+} else if(multi_anno == "keep the first one") {
+  temp_step2_anno = 
+    temp_step2_anno %>% dplyr::slice_head(n = 1)
+} else {
+  temp_step2_anno = temp_step1_anno
+}
+
+##> step2 remove redundancy
+
+if(redundancy == "keep highest total score") {
+  temp_step3_anno = temp_step2_anno %>% 
+    ungroup() %>% 
+    group_by(Compound.name) %>% 
+    dplyr::slice_min(order_by = Level) %>% 
+    dplyr::slice_max(order_by = Total.score) %>% 
+    dplyr::slice_min(order_by = Adduct_level)
+} else if(redundancy == "keep the first one") {
+  temp_step3_anno = 
+    temp_step2_anno %>% 
+    ungroup() %>% 
+    group_by(Compound.name) %>% 
+    dplyr::slice_min(order_by = Level) %>% 
+    dplyr::slice_max(order_by = Total.score) %>% 
+    dplyr::slice_min(order_by = Adduct_level) %>% 
+    dplyr::slice_head(n = 1)
+} else {
+  temp_step3_anno = temp_step2_anno
+}
+
+
+output = list(
+  Annotation_Full = rbind(annotation_tbl_pos,annotation_tbl_neg),
+  Annotation_clean = temp_step3_anno
+)
+
+
+# KEGG and classification -------------------------------------------------
+
+temp_step4_classification <- 
+  temp_step3_anno %>% 
+  ungroup() %>% 
+  dplyr::select(variable_id,Compound.name,Lab.ID) %>% 
+  dplyr::left_join(plantmdb::class.database,by = "Lab.ID")
+
+temp_unclass <- temp_step4_classification %>% 
+  dplyr::filter(is.na(superclass))
+temp_class <- temp_step4_classification %>% 
+  dplyr::filter(!is.na(superclass))
+if(isTRUE(unclass)) {
+  query1 = temp_unclass %>% dplyr::pull(Compound.name) %>% unique()
+  n2cid = MDAtoolkits::mda_get_cid_fast(query = query1,core_num = 10)
+  query2 = n2cid %>% dplyr::pull(InChIKey) %>% unique()
+  Inchi2class = MDAtoolkits::cfb_crawler(query = query2,delay_max = 0.6,ssl.verifypeer = FALSE)
+  n2kegg = MDAtoolkits::mda_name2kegg(query = query1,core_num = 10)
+  temp_unclass_final <- 
+  temp_unclass %>% 
+    dplyr::select(variable_id,Compound.name,Lab.ID) %>% 
+    dplyr::left_join(n2cid %>% dplyr::rename("Compound.name" = "query") )%>% 
+    dplyr::left_join(Inchi2class) %>% 
+    dplyr::left_join(n2kegg) %>% 
+    tibble() %>% 
+    dplyr::select(colnames(temp_unclass)) %>% 
+    mutate(KEGG.ID = case_when(
+      KEGG.ID == "" ~ NA,
+      TRUE ~ KEGG.ID
+    ))
+  temp_step4_classification <- rbind(temp_class,temp_unclass_final)
+    
+}
+
+output = list(
+  Annotation_Full = rbind(annotation_tbl_pos,annotation_tbl_neg),
+  Annotation_clean = temp_step3_anno,
+  Annotation_class = temp_step4_classification
+)
+
+writexl::write_xlsx(output,"Feature_annotation/Compound_annotation.xlsx")
+
 

@@ -1,4 +1,0 @@
-Outlier in positive model:
-QC_01
-QC_03
-method: customized
